@@ -36,9 +36,9 @@ def main() -> None:
         default="data/processed/transactions_processed.parquet",
         help="Path to write processed transactions as parquet",
     )
-    parser.add_argument("--min-support", type=int, default=100)
+    parser.add_argument("--min-support", type=int, default=2)
     parser.add_argument("--min-lift", type=float, default=1.0)
-    parser.add_argument("--min-cooccurrence", type=int, default=1)
+    parser.add_argument("--min-cooccurrence", type=int, default=2)
     parser.add_argument("--train-fraction", type=float, default=0.8)
     args = parser.parse_args()
 
