@@ -19,13 +19,15 @@ def load_transactions(
         DataFrame with columns [basket_id, product_id, day] plus product
         metadata columns if product_parquet_path was given.
     """
-    df = pd.read_parquet(parquet_path, columns=["basket_id", "product_id", "day"])
+    df = pd.read_parquet(parquet_path, columns=["BASKET_ID", "PRODUCT_ID", "DAY"])
+    df.columns = df.columns.str.lower()
 
     if product_parquet_path is not None:
         products = pd.read_parquet(
             product_parquet_path,
-            columns=["product_id", "commodity_desc", "sub_commodity_desc", "department", "brand"],
+            columns=["PRODUCT_ID", "COMMODITY_DESC", "SUB_COMMODITY_DESC", "DEPARTMENT", "BRAND"],
         )
+        products.columns = products.columns.str.lower()
         df = df.merge(products, on="product_id", how="left")
 
     return df
