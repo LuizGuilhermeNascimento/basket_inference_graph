@@ -29,6 +29,8 @@ def main() -> None:
         default="data/processed/transactions_processed.parquet",
         help="Path to write processed transactions as parquet",
     )
+    parser.add_argument("--train-output", default="data/processed/train.parquet")
+    parser.add_argument("--test-output", default="data/processed/test.parquet")
     parser.add_argument("--min-support", type=int, default=2)
     parser.add_argument("--min-lift", type=float, default=0)
     parser.add_argument("--min-cooccurrence", type=int, default=2)
@@ -53,8 +55,17 @@ def main() -> None:
     df.to_parquet(args.processed_output, index=False)
     print(f"  Saved processed parquet: {args.processed_output}")
 
-    train_baskets, test_baskets = split_by_day(df, train_fraction=args.train_fraction)
-    print(f"  Train baskets: {len(train_baskets):,} | Test baskets: {len(test_baskets):,}")
+    train_baskets, test_baskets, cutoff_day = split_by_day(df, train_fraction=args.train_fraction)
+    print(f"  Cutoff day: {cutoff_day} | Train baskets: {len(train_baskets):,} | Test baskets: {len(test_baskets):,}")
+
+    basket_day = df.groupby("basket_id")["day"].min()
+    train_ids = basket_day[basket_day <= cutoff_day].index
+    train_df = df[df["basket_id"].isin(train_ids)]
+    test_df = df[~df["basket_id"].isin(train_ids)]
+    train_df.to_parquet(args.train_output, index=False)
+    test_df.to_parquet(args.test_output, index=False)
+    print(f"  Saved train parquet: {args.train_output} ({len(train_df):,} rows)")
+    print(f"  Saved test parquet:  {args.test_output} ({len(test_df):,} rows)")
 
     print("\nPhase 2 — Graph construction")
     print("  Building co-occurrence matrix ...")

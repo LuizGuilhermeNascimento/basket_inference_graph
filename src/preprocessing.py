@@ -52,8 +52,6 @@ def clean_transactions(
           [product_id, commodity_desc, sub_commodity_desc, department, brand]
           (metadata columns are present only if loader joined product.csv).
     """
-    df = df.drop_duplicates(subset=["basket_id", "product_id"])
-
     product_basket_counts = df.groupby("product_id")["basket_id"].nunique()
     frequent_products = product_basket_counts[product_basket_counts >= min_support].index
     df = df[df["product_id"].isin(frequent_products)].reset_index(drop=True)
@@ -77,7 +75,7 @@ def clean_transactions(
 def split_by_day(
     df: pd.DataFrame,
     train_fraction: float = 0.8,
-) -> tuple[list[set[int]], list[set[int]]]:
+) -> tuple[list[set[int]], list[set[int]], int]:
     """
     Chronological train/test split based on the day of each basket.
 
@@ -88,7 +86,9 @@ def split_by_day(
     Returns:
         (train_baskets, test_baskets) — each a list of sets of product_idx values.
     """
-    cutoff_day = df["day"].quantile(train_fraction)
+    unique_days = sorted(df["day"].unique())
+    n_train_days = max(1, int(len(unique_days) * train_fraction))
+    cutoff_day = unique_days[n_train_days - 1]
 
     basket_day = df.groupby("basket_id")["day"].min()
 
@@ -105,4 +105,4 @@ def split_by_day(
     train_baskets = build_basket_sets(train_basket_ids)
     test_baskets = build_basket_sets(test_basket_ids)
 
-    return train_baskets, test_baskets
+    return train_baskets, test_baskets, cutoff_day

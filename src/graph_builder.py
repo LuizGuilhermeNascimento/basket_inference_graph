@@ -6,10 +6,6 @@ import networkx as nx
 from dataclasses import dataclass
 
 
-# ---------------------------------------------------------------------------
-# Co-occurrence
-# ---------------------------------------------------------------------------
-
 @dataclass
 class CooccurrenceData:
     C: sp.csr_matrix    # C[i,j] = # baskets containing both i and j
@@ -62,10 +58,6 @@ def build_cooccurrence(
     return CooccurrenceData(C=C, N_items=N_items, N=N, n_products=n_products)
 
 
-# ---------------------------------------------------------------------------
-# Lift
-# ---------------------------------------------------------------------------
-
 def compute_lift(
     cooc: CooccurrenceData,
     min_lift: float = 1.0,
@@ -105,10 +97,6 @@ def compute_lift(
         shape=(cooc.n_products, cooc.n_products),
     )
 
-
-# ---------------------------------------------------------------------------
-# Backbone (Disparity Filter)
-# ---------------------------------------------------------------------------
 
 def disparity_filter(
     lift_matrix: sp.coo_matrix,
