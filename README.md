@@ -1,54 +1,81 @@
-# basket_inference_graph
+# Projeto de MC859 - Previsão de Cestas de Compra a partir de Grafos de Associação entre Produtos
 
-Builds a weighted product-association graph from retail transaction data for basket inference tasks.
+Constrói um grafo ponderado de associação entre produtos a partir de dados de transações de varejo para tarefas de inferência de cesta.
 
-## Overview
+## Visão geral
 
-Uses the [Dunnhumby — The Complete Journey](docs/dunnhumby%20-%20The%20Complete%20Journey%20User%20Guide.pdf) dataset. The pipeline:
+Utiliza o conjunto de dados [Dunnhumby — The Complete Journey](docs/dunnhumby%20-%20The%20Complete%20Journey%20User%20Guide.pdf). O pipeline é composto por:
 
-1. **Preprocessing** — load, deduplicate, filter rare products, chronological train/test split
-2. **Co-occurrence** — sparse matrix counting how often pairs of products appear in the same basket
-3. **Lift** — normalizes co-occurrence by marginal frequencies: `lift(i,j) = C(i,j)·N / (N_i·N_j)`
-4. **Backbone extraction** *(optional)* — prunes low-signal edges with the Disparity Filter (Serrano et al., 2009)
-5. **Graph** — exports a weighted `DiGraph` in GraphML and GEXF formats
+1. **Pré-processamento** — carrega, filtra produtos raros e faz divisão cronológica em treino/teste
+2. **Coocorrência** — matriz esparsa que conta com que frequência pares de produtos aparecem na mesma cesta
+3. **Confiança** — calcula arestas direcionadas com `conf(i→j) = C(i,j) / N_i`
+4. **Filtro por lift** — aplica limiar de lift `lift(i,j) = C(i,j)·N / (N_i·N_j)` durante a construção das arestas
+5. **Grafo** — exporta um `DiGraph` ponderado (peso = confiança) nos formatos GraphML e GEXF
 
-## Usage
+## Uso
 
 ```bash
 python3 main.py \
   --data data/raw/transaction_data.parquet \
-  --products data/raw/product.parquet \
-  --output outputs/graphs
+  --output outputs/graphs \
+  --products data/raw/product.parquet
 ```
 
-Key parameters:
+Parâmetros principais:
 
-| Flag | Default | Description |
+| Flag | Padrão | Descrição |
 |---|---|---|
-| `--min-support` | 2 | Minimum basket appearances for a product to be kept |
-| `--min-cooccurrence` | 2 | Minimum co-occurrence count for an edge |
-| `--min-lift` | 0 | Minimum lift threshold |
-| `--alpha` | 0 | Disparity filter threshold (0 = disabled) |
-| `--train-fraction` | 0.8 | Fraction of days used for graph construction |
+| `--data` | `data/raw/transaction_data.parquet` | Caminho do arquivo de transações |
+| `--products` | `None` | Caminho do arquivo de produtos (opcional; habilita atributos de nós) |
+| `--output` | `outputs/graphs` | Diretório para os arquivos do grafo |
+| `--processed-output` | `data/processed/transactions_processed.parquet` | Arquivo parquet das transações processadas |
+| `--train-output` | `data/processed/train.parquet` | Arquivo parquet da partição de treino |
+| `--test-output` | `data/processed/test.parquet` | Arquivo parquet da partição de teste |
+| `--min-support` | 2 | Número mínimo de aparições em cestas para manter um produto |
+| `--min-confidence` | 0.0 | Limiar mínimo de confiança para manter arestas direcionadas |
+| `--min-cooccurrence` | 2 | Contagem mínima de coocorrência para manter uma aresta |
+| `--min-lift` | 1 | Limiar mínimo de lift usado como filtro |
+| `--train-fraction` | 0.8 | Fração de dias usada para a construção do grafo |
 
-## Outputs
+## Saídas
 
 ```
-outputs/graphs/association_graph.graphml   # canonical format
-outputs/graphs/association_graph.gexf      # Gephi-compatible
+outputs/graphs/association_graph.graphml   # formato canônico
+outputs/graphs/association_graph.gexf      # compatível com Gephi
 data/processed/transactions_processed.parquet
+data/processed/train.parquet
+data/processed/test.parquet
 ```
+
+Obs.: ao final da execução, o script valida a serialização verificando se os pesos foram preservados no round-trip de leitura do GraphML.
 
 ## Notebooks
 
-| Notebook | Purpose |
+| Notebook | Finalidade |
 |---|---|
-| `01_eda.ipynb` | Exploratory data analysis |
-| `02_parameter_sensitivity.ipynb` | Effect of min-support, lift, and alpha on graph size |
-| `03_backbone_analysis.ipynb` | Disparity filter behaviour and backbone structure |
-| `04_graph_analysis.ipynb` | Degree distribution, centrality, community detection |
+| `notebooks/eda.ipynb` | Análise exploratória dos dados de transações e produtos |
+| `notebooks/graph_analysis.ipynb` | Análise estrutural do grafo (grau, centralidade e comunidades) |
 
-## Setup
+## Visualização
+
+Para visualizar subgrafos do resultado:
+
+```bash
+python3 scripts/visualize_graph.py --strategy bfs --seed 1 --radius 1 --n-nodes 50 --output my_graph.png
+```
+
+Parâmetros de visualização:
+
+| Flag | Padrão | Descrição |
+|---|---|---|
+| `--graph-dir` | `outputs/graphs` | Diretório contendo `association_graph.graphml` |
+| `--strategy` | `ego` | Estratégia de amostragem: `ego`, `bfs` ou `random` |
+| `--seed` | `None` | Nó semente (`ego`/`bfs`) ou semente do RNG (`random`) |
+| `--radius` | 2 | Raio (saltos) para `ego`/`bfs` |
+| `--n-nodes` | 150 | Número de nós para a estratégia `random` |
+| `--output` | `None` | Caminho de saída da figura; se omitido, abre visualização interativa |
+
+## Configuração
 
 ```bash
 pip install -r requirements.txt

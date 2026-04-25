@@ -1,6 +1,4 @@
 """
-End-to-end runner for Phases 1 and 2.
-
 Usage:
     python3 main.py \
         --data "data/raw/transaction_data.parquet" \
@@ -16,7 +14,7 @@ import argparse
 import os
 
 from src.preprocessing import load_transactions, clean_transactions, split_by_day
-from src.graph_builder import build_cooccurrence, compute_lift, disparity_filter, build_graph, save_graph, load_graph
+from src.graph_builder import build_cooccurrence, compute_confidence, build_graph, save_graph, load_graph
 
 
 def main() -> None:
@@ -32,10 +30,10 @@ def main() -> None:
     parser.add_argument("--train-output", default="data/processed/train.parquet")
     parser.add_argument("--test-output", default="data/processed/test.parquet")
     parser.add_argument("--min-support", type=int, default=2)
-    parser.add_argument("--min-lift", type=float, default=0)
+    parser.add_argument("--min-confidence", type=float, default=0.0)
+    parser.add_argument("--min-lift", type=float, default=1)
     parser.add_argument("--min-cooccurrence", type=int, default=2)
     parser.add_argument("--train-fraction", type=float, default=0.8)
-    parser.add_argument("--alpha", type=float, default=0, help="Disparity filter significance threshold (0 = skip)")
     args = parser.parse_args()
 
     print("Phase 1 — Preprocessing")
@@ -72,18 +70,13 @@ def main() -> None:
     cooc = build_cooccurrence(train_baskets, n_products)
     print(f"  Co-occurrence matrix: {cooc.C.nnz:,} nonzero entries | N={cooc.N:,} baskets")
 
-    print(f"  Computing lift (min_lift={args.min_lift}, min_cooccurrence={args.min_cooccurrence}) ...")
-    n_before_lift = int((cooc.C.tocoo().data >= args.min_cooccurrence).sum())
-    lift_matrix = compute_lift(cooc, min_lift=args.min_lift, min_cooccurrence=args.min_cooccurrence)
-    print(f"  After co-occurrence filter: {n_before_lift:,} pairs | After lift filter: {lift_matrix.nnz:,} pairs")
-
-    if args.alpha > 0:
-        print(f"  Applying disparity filter (alpha={args.alpha}) ...")
-        lift_matrix = disparity_filter(lift_matrix, alpha=args.alpha)
-        print(f"  After backbone extraction: {lift_matrix.nnz:,} surviving pairs")
+    print(f"  Computing confidence (min_confidence={args.min_confidence}, min_lift={args.min_lift}, min_cooccurrence={args.min_cooccurrence}) ...")
+    n_before_filter = int((cooc.C.tocoo().data >= args.min_cooccurrence).sum())
+    weight_matrix = compute_confidence(cooc, min_confidence=args.min_confidence, min_cooccurrence=args.min_cooccurrence, min_lift=args.min_lift)
+    print(f"  After co-occurrence filter: {n_before_filter:,} pairs | After confidence filter: {weight_matrix.nnz:,} directed edges")
 
     print("  Assembling DiGraph ...")
-    G = build_graph(lift_matrix, product_meta=product_meta if args.products else None)
+    G = build_graph(weight_matrix, product_meta=product_meta if args.products else None)
     print(f"  Graph: {G.number_of_nodes():,} nodes | {G.number_of_edges():,} directed edges")
 
     print(f"  Saving to {args.output} ...")

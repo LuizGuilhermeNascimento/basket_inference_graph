@@ -58,112 +58,59 @@ def build_cooccurrence(
     return CooccurrenceData(C=C, N_items=N_items, N=N, n_products=n_products)
 
 
-def compute_lift(
+def compute_confidence(
     cooc: CooccurrenceData,
-    min_lift: float = 1.0,
+    min_confidence: float = 0.0,
     min_cooccurrence: int = 5,
+    min_lift: float = 0.0,
 ) -> sp.coo_matrix:
     """
-    Compute lift for all item pairs with sufficient co-occurrence.
+    Compute confidence for all directed item pairs with sufficient co-occurrence.
 
-    lift(i→j) = (C[i,j] × N) / (N_items[i] × N_items[j])
+    conf(i→j) = C[i,j] / N_items[i]
+    lift(i,j)  = C[i,j] * N / (N_items[i] * N_items[j])  — symmetric, used only for filtering
 
-    Pairs failing min_cooccurrence or min_lift thresholds are pruned.
+    Each undirected pair (i,j) produces two directed edges with (typically)
+    different confidence weights, making the resulting matrix asymmetric.
 
     Args:
         cooc: output of build_cooccurrence.
-        min_lift: keep edges with lift > min_lift (default 1.0).
+        min_confidence: keep directed edges with confidence > min_confidence.
         min_cooccurrence: discard pairs with fewer than this many co-occurrences.
+        min_lift: discard undirected pairs with lift <= min_lift before generating directed edges.
 
     Returns:
-        Sparse COO matrix of lift values for surviving (i, j) pairs.
+        Sparse asymmetric COO matrix of confidence values (shape n×n).
     """
-    C_coo = cooc.C.tocoo()
+    C_upper = sp.triu(cooc.C, k=1).tocoo()
 
-    mask = C_coo.data >= min_cooccurrence
-    rows = C_coo.row[mask]
-    cols = C_coo.col[mask]
-    c_vals = C_coo.data[mask].astype(np.float64)
+    mask = C_upper.data >= min_cooccurrence
+    rows = C_upper.row[mask]
+    cols = C_upper.col[mask]
+    c_vals = C_upper.data[mask].astype(np.float64)
 
-    lift_vals = (c_vals * cooc.N) / (cooc.N_items[rows] * cooc.N_items[cols])
+    if min_lift > 0.0:
+        lift_vals = (c_vals * cooc.N) / (cooc.N_items[rows] * cooc.N_items[cols])
+        mask = lift_vals > min_lift
+        rows, cols, c_vals = rows[mask], cols[mask], c_vals[mask]
 
-    strong_mask = lift_vals > min_lift
-    rows = rows[strong_mask]
-    cols = cols[strong_mask]
-    lift_vals = lift_vals[strong_mask]
+    conf_ij = c_vals / cooc.N_items[rows]
+    conf_ji = c_vals / cooc.N_items[cols]
+
+    all_rows = np.concatenate([rows, cols])
+    all_cols = np.concatenate([cols, rows])
+    all_weights = np.concatenate([conf_ij, conf_ji])
+
+    if min_confidence > 0.0:
+        mask = all_weights > min_confidence
+        all_rows = all_rows[mask]
+        all_cols = all_cols[mask]
+        all_weights = all_weights[mask]
 
     return sp.coo_matrix(
-        (lift_vals, (rows, cols)),
+        (all_weights, (all_rows.astype(np.int32), all_cols.astype(np.int32))),
         shape=(cooc.n_products, cooc.n_products),
     )
-
-
-def disparity_filter(
-    lift_matrix: sp.coo_matrix,
-    alpha: float = 0.05,
-    bidirectional: bool = True,
-) -> sp.coo_matrix:
-    """
-    Extract the backbone of a weighted directed graph via the Disparity Filter
-    (Serrano et al., 2009).
-
-    For each source node i with out-degree k_i and strength s_i = Σ_j w_ij:
-        p_ij  = w_ij / s_i
-        α_ij  = (1 - p_ij)^(k_i - 1)
-
-    Keeps edge (i→j) if α_ij < alpha. With bidirectional=True, keeps the edge
-    if it passes the test from either the src or dst perspective.
-
-    Args:
-        lift_matrix: sparse COO matrix of lift values (shape n×n).
-        alpha: significance threshold (default 0.05).
-        bidirectional: keep edge if significant from src OR dst perspective.
-
-    Returns:
-        Filtered sparse COO matrix with the same shape as the input.
-    """
-    rows = lift_matrix.row.astype(np.int64)
-    cols = lift_matrix.col.astype(np.int64)
-    weights = lift_matrix.data.astype(np.float64)
-    n = lift_matrix.shape[0]
-
-    degree_src, strength_src = _node_stats(rows, weights, n)
-    alpha_src = _significance(weights, rows, degree_src, strength_src)
-
-    if not bidirectional:
-        mask = alpha_src < alpha
-    else:
-        degree_dst, strength_dst = _node_stats(cols, weights, n)
-        alpha_dst = _significance(weights, cols, degree_dst, strength_dst)
-        mask = (alpha_src < alpha) | (alpha_dst < alpha)
-
-    return sp.coo_matrix(
-        (weights[mask], (rows[mask].astype(np.int32), cols[mask].astype(np.int32))),
-        shape=lift_matrix.shape,
-    )
-
-
-def _node_stats(
-    node_indices: np.ndarray,
-    weights: np.ndarray,
-    n: int,
-) -> tuple[np.ndarray, np.ndarray]:
-    degree = np.bincount(node_indices, minlength=n).astype(np.float64)
-    strength = np.bincount(node_indices, weights=weights, minlength=n)
-    return degree, strength
-
-
-def _significance(
-    weights: np.ndarray,
-    src_indices: np.ndarray,
-    degree: np.ndarray,
-    strength: np.ndarray,
-) -> np.ndarray:
-    k = degree[src_indices]
-    s = strength[src_indices]
-    p = weights / s
-    # Nodes with degree=1 have k-1=0, so alpha=1 — never significant, correctly filtered out
-    return (1 - p) ** (k - 1)
 
 
 # ---------------------------------------------------------------------------
@@ -171,23 +118,22 @@ def _significance(
 # ---------------------------------------------------------------------------
 
 def build_graph(
-    lift_matrix: sp.coo_matrix,
+    weight_matrix: sp.coo_matrix,
     product_meta: pd.DataFrame | None = None,
 ) -> nx.DiGraph:
     """
-    Assemble a weighted directed graph from the lift COO matrix.
+    Assemble a weighted directed graph from a COO weight matrix.
 
-    Each nonzero entry (i, j) in lift_matrix produces two directed edges:
-    i→j and j→i, both with weight = lift(i,j). Lift is symmetric, so
-    both directions get the same weight. Keeping both directions allows
-    the scorer to sum over observed items i ∈ S via G[i][j]['weight'].
+    Each nonzero entry (i, j) produces one directed edge i→j with the
+    given weight. For asymmetric metrics like confidence, (i,j) and (j,i)
+    carry different weights and must both be present in weight_matrix.
 
     If product_meta is provided (DataFrame indexed by product_idx with columns
     like commodity_desc, department, brand), those fields are attached as node
     attributes — useful for Gephi visualisation and analysis notebooks.
 
     Args:
-        lift_matrix: sparse COO matrix with lift values.
+        weight_matrix: sparse COO matrix with edge weights.
         product_meta: optional metadata DataFrame from clean_transactions.
 
     Returns:
@@ -196,10 +142,9 @@ def build_graph(
     """
     G = nx.DiGraph()
 
-    lift_coo = lift_matrix.tocoo()
-    for i, j, w in zip(lift_coo.row.tolist(), lift_coo.col.tolist(), lift_coo.data.tolist()):
+    weight_coo = weight_matrix.tocoo()
+    for i, j, w in zip(weight_coo.row.tolist(), weight_coo.col.tolist(), weight_coo.data.tolist()):
         G.add_edge(int(i), int(j), weight=float(w))
-        G.add_edge(int(j), int(i), weight=float(w))
 
     if product_meta is not None:
         for node in G.nodes():
