@@ -2,7 +2,7 @@
 Convert all CSV files in input_path to Parquet and save in output_path.
 
 Usage:
-    python scripts/csv_to_parquet.py <input_path> <output_path>
+    python scripts/csv_to_parquet.py --input-path <input_path> --output-path <output_path>
 """
 
 import argparse
@@ -29,8 +29,8 @@ def convert_csv_to_parquet(input_path: Path, output_path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Convert CSV files to Parquet.")
-    parser.add_argument("input_path", type=Path, help="Directory containing CSV files")
-    parser.add_argument("output_path", type=Path, help="Directory to save Parquet files")
+    parser.add_argument("--input-path", type=Path, help="Directory containing CSV files")
+    parser.add_argument("--output-path", type=Path, help="Directory to save Parquet files")
     args = parser.parse_args()
 
     if not args.input_path.is_dir():
