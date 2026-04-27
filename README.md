@@ -47,6 +47,8 @@ data/processed/train.parquet
 data/processed/test.parquet
 ```
 
+As instâncias do grafo estão compactadas em `instances.zip`.
+
 Obs.: ao final da execução, o script valida a serialização verificando se os pesos foram preservados no round-trip de leitura do GraphML.
 
 ## Notebooks
