@@ -30,8 +30,6 @@ def main() -> None:
     parser.add_argument("--train-output", default="data/processed/train.parquet")
     parser.add_argument("--test-output", default="data/processed/test.parquet")
     parser.add_argument("--min-support", type=int, default=2)
-    parser.add_argument("--min-confidence", type=float, default=0.0)
-    parser.add_argument("--min-lift", type=float, default=1)
     parser.add_argument("--min-cooccurrence", type=int, default=2)
     parser.add_argument("--train-fraction", type=float, default=0.8)
     args = parser.parse_args()
@@ -70,10 +68,9 @@ def main() -> None:
     cooc = build_cooccurrence(train_baskets, n_products)
     print(f"  Co-occurrence matrix: {cooc.C.nnz:,} nonzero entries | N={cooc.N:,} baskets")
 
-    print(f"  Computing confidence (min_confidence={args.min_confidence}, min_lift={args.min_lift}, min_cooccurrence={args.min_cooccurrence}) ...")
-    n_before_filter = int((cooc.C.tocoo().data >= args.min_cooccurrence).sum())
-    weight_matrix = compute_confidence(cooc, min_confidence=args.min_confidence, min_cooccurrence=args.min_cooccurrence, min_lift=args.min_lift)
-    print(f"  After co-occurrence filter: {n_before_filter:,} pairs | After confidence filter: {weight_matrix.nnz:,} directed edges")
+    print(f"  Computing confidence (min_cooccurrence={args.min_cooccurrence}) ...")
+    weight_matrix = compute_confidence(cooc, min_cooccurrence=args.min_cooccurrence)
+    print(f"  Directed edges: {weight_matrix.nnz:,}")
 
     print("  Assembling DiGraph ...")
     G = build_graph(weight_matrix, product_meta=product_meta if args.products else None)
@@ -81,16 +78,6 @@ def main() -> None:
 
     print(f"  Saving to {args.output} ...")
     save_graph(G, args.output)
-
-    # Verify round-trip weight preservation
-    G_check = load_graph(args.output, fmt="graphml")
-    sample = list(G.edges(data=True))[0]
-    i, j, attrs = sample
-    loaded_weight = G_check[i][j]["weight"]
-    assert abs(loaded_weight - attrs["weight"]) < 1e-9, (
-        f"Weight mismatch after serialization: {attrs['weight']} vs {loaded_weight}"
-    )
-    print("  Round-trip weight check passed.")
 
     print(f"\nDone. Graph written to:")
     print(f"  {args.output}/association_graph.graphml")

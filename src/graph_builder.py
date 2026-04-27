@@ -60,24 +60,19 @@ def build_cooccurrence(
 
 def compute_confidence(
     cooc: CooccurrenceData,
-    min_confidence: float = 0.0,
     min_cooccurrence: int = 5,
-    min_lift: float = 0.0,
 ) -> sp.coo_matrix:
     """
     Compute confidence for all directed item pairs with sufficient co-occurrence.
 
     conf(i→j) = C[i,j] / N_items[i]
-    lift(i,j)  = C[i,j] * N / (N_items[i] * N_items[j])  — symmetric, used only for filtering
 
     Each undirected pair (i,j) produces two directed edges with (typically)
     different confidence weights, making the resulting matrix asymmetric.
 
     Args:
         cooc: output of build_cooccurrence.
-        min_confidence: keep directed edges with confidence > min_confidence.
         min_cooccurrence: discard pairs with fewer than this many co-occurrences.
-        min_lift: discard undirected pairs with lift <= min_lift before generating directed edges.
 
     Returns:
         Sparse asymmetric COO matrix of confidence values (shape n×n).
@@ -89,23 +84,12 @@ def compute_confidence(
     cols = C_upper.col[mask]
     c_vals = C_upper.data[mask].astype(np.float64)
 
-    if min_lift > 0.0:
-        lift_vals = (c_vals * cooc.N) / (cooc.N_items[rows] * cooc.N_items[cols])
-        mask = lift_vals > min_lift
-        rows, cols, c_vals = rows[mask], cols[mask], c_vals[mask]
-
     conf_ij = c_vals / cooc.N_items[rows]
     conf_ji = c_vals / cooc.N_items[cols]
 
     all_rows = np.concatenate([rows, cols])
     all_cols = np.concatenate([cols, rows])
     all_weights = np.concatenate([conf_ij, conf_ji])
-
-    if min_confidence > 0.0:
-        mask = all_weights > min_confidence
-        all_rows = all_rows[mask]
-        all_cols = all_cols[mask]
-        all_weights = all_weights[mask]
 
     return sp.coo_matrix(
         (all_weights, (all_rows.astype(np.int32), all_cols.astype(np.int32))),
