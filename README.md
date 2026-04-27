@@ -12,6 +12,8 @@ Utiliza o conjunto de dados [Dunnhumby — The Complete Journey](docs/dunnhumby%
 4. **Filtro por lift** — aplica limiar de lift `lift(i,j) = C(i,j)·N / (N_i·N_j)` durante a construção das arestas
 5. **Grafo** — exporta um `DiGraph` ponderado (peso = confiança) nos formatos GraphML e GEXF
 
+As instâncias do grafo estão compactadas em [instances.zip](instances.zip).
+
 ## Uso
 
 ```bash
@@ -46,8 +48,6 @@ data/processed/transactions_processed.parquet
 data/processed/train.parquet
 data/processed/test.parquet
 ```
-
-As instâncias do grafo estão compactadas em [instances.zip](instances.zip).
 
 ## Notebooks
 
