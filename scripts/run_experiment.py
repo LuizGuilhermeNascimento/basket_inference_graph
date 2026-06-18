@@ -96,6 +96,12 @@ def main() -> None:
                         help="Save partial results every N baskets evaluated (0 = only at the end)")
     parser.add_argument("--n-workers", type=int, default=3,
                         help="Threads for parallel basket processing (scipy releases GIL during matmul)")
+    parser.add_argument(
+        "--n-hidden", type=int, default=None,
+        help="Fixed number of items to hide per basket (enables fixed-hidden protocol). "
+             "When set, n_obs specifies observed set sizes and recall denominator is always n_hidden. "
+             "Default None keeps the original fraction-based protocol.",
+    )
     args = parser.parse_args()
 
     if not (0 <= args.shard_id < args.n_shards):
@@ -181,6 +187,8 @@ def main() -> None:
         "n_shards": args.n_shards,
         "shard_id": args.shard_id,
         "n_workers": args.n_workers,
+        "protocol": "fixed-hidden" if args.n_hidden else "fraction",
+        "n_hidden": args.n_hidden,
     }
     params_path = os.path.join(output_dir, "params.json")
     with open(params_path, "w") as f:
@@ -207,6 +215,7 @@ def main() -> None:
         checkpoint_every=args.checkpoint_every,
         checkpoint_fn=checkpoint_fn,
         n_workers=args.n_workers,
+        n_hidden=args.n_hidden,
     )
 
     print(f"  Done — {len(results_df):,} result rows")

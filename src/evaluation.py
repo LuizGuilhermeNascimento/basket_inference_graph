@@ -116,8 +116,64 @@ def _process_basket(
     k_values: list[int],
     n_repetitions: int,
     max_k: int,
+    n_hidden: int | None = None,
 ) -> tuple[list[dict], dict]:
     basket_in_graph = basket & graph_products
+
+    if n_hidden is not None:
+        # Fixed-hidden protocol: hide exactly n_hidden items per rep, vary observed context.
+        # recall denominator = n_hidden (constant), enabling detection of context utilization.
+        if len(basket_in_graph) <= n_hidden:
+            return [], {}
+
+        rng = np.random.default_rng(basket_seed)
+        basket_list = list(basket_in_graph)
+        rep_seeds = rng.integers(0, 2**31, size=n_repetitions)
+        records: list[dict] = []
+        hit_stats: dict = {}
+
+        for rep in range(n_repetitions):
+            rep_rng = np.random.default_rng(int(rep_seeds[rep]))
+            hidden = set(int(x) for x in rep_rng.choice(basket_list, size=n_hidden, replace=False))
+            remaining = basket_in_graph - hidden
+            remaining_list = list(remaining)
+
+            for n_obs_label, n_obs in _resolve_n_obs(n_obs_values, len(remaining)):
+                observed = set(int(x) for x in rep_rng.choice(remaining_list, size=n_obs, replace=False))
+                candidates = graph_products - observed
+
+                for method_name, rec in recommenders.items():
+                    recs = rec.recommend(observed, candidates, max_k)
+                    for k in k_values:
+                        top_k_set = set(recs[:k])
+                        n_hits = len(top_k_set & hidden)
+
+                        for product in hidden:
+                            if product not in hit_stats:
+                                hit_stats[product] = {}
+                            pm = hit_stats[product]
+                            if method_name not in pm:
+                                pm[method_name] = {}
+                            pk = pm[method_name]
+                            if k not in pk:
+                                pk[k] = [0, 0]
+                            pk[k][0] += 1
+                            if product in top_k_set:
+                                pk[k][1] += 1
+
+                        records.append({
+                            "basket_id": basket_id,
+                            "n_obs": n_obs_label,
+                            "method": method_name,
+                            "k": k,
+                            "repetition": rep,
+                            "precision": n_hits / k,
+                            "recall": n_hits / n_hidden,
+                        })
+
+        return records, hit_stats
+
+    # --- Fraction protocol (original behaviour) ---
     if len(basket_in_graph) < 2:
         return [], {}
 
@@ -203,6 +259,7 @@ def run_basket_completion_experiment(
     checkpoint_every: int = 0,
     checkpoint_fn: Callable[[pd.DataFrame, pd.DataFrame], None] | None = None,
     n_workers: int = 1,
+    n_hidden: int | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Runs the full basket completion experiment.
@@ -240,7 +297,7 @@ def run_basket_completion_experiment(
             bid, basket, int(basket_seeds[bid]),
             graph_products, graph_products_arr,
             recommenders, n_obs_values, k_values,
-            n_repetitions, max_k,
+            n_repetitions, max_k, n_hidden,
         )
 
     n_evaluated = 0
