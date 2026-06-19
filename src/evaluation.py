@@ -105,6 +105,22 @@ def _resolve_n_obs(
     return result
 
 
+def min_in_graph_size_for_specs(n_obs_specs: list[int | float | str]) -> int:
+    """Smallest |basket_in_graph| for which every spec in n_obs_specs produces a valid,
+    distinct n_obs value — guaranteeing all n_obs conditions evaluate the same basket population.
+
+    Returns 2 when "all" is present (the spec varies by design, population issue is inherent).
+    """
+    if "all" in n_obs_specs:
+        return 2
+    # At large n every fraction/int produces a distinct valid value — that's the target count.
+    target = len(_resolve_n_obs(n_obs_specs, 10_000))
+    for n in range(2, 10_001):
+        if len(_resolve_n_obs(n_obs_specs, n)) == target:
+            return n
+    raise ValueError(f"Could not resolve min_in_graph_size for n_obs_specs={n_obs_specs!r}")
+
+
 def _process_basket(
     basket_id: int,
     basket: set[int],
@@ -117,6 +133,7 @@ def _process_basket(
     n_repetitions: int,
     max_k: int,
     n_hidden: int | None = None,
+    min_in_graph_size: int = 2,
 ) -> tuple[list[dict], dict]:
     basket_in_graph = basket & graph_products
 
@@ -174,7 +191,7 @@ def _process_basket(
         return records, hit_stats
 
     # --- Fraction protocol (original behaviour) ---
-    if len(basket_in_graph) < 2:
+    if len(basket_in_graph) < min_in_graph_size:
         return [], {}
 
     rng = np.random.default_rng(basket_seed)
@@ -260,6 +277,7 @@ def run_basket_completion_experiment(
     checkpoint_fn: Callable[[pd.DataFrame, pd.DataFrame], None] | None = None,
     n_workers: int = 1,
     n_hidden: int | None = None,
+    min_in_graph_basket_size: int | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Runs the full basket completion experiment.
@@ -269,6 +287,10 @@ def run_basket_completion_experiment(
                    scipy sparse matmuls release the GIL, so threading scales well.
         checkpoint_every: save partial results every N baskets evaluated (0 = disabled).
         checkpoint_fn: called with (partial_results_df, partial_hit_stats_df) at each checkpoint.
+        min_in_graph_basket_size: minimum |basket_in_graph| for a basket to be evaluated.
+            None (default) auto-derives from n_obs_values so that every n_obs spec produces a
+            valid, distinct observed-set size — ensuring all conditions evaluate the same basket
+            population. Ignored when n_hidden is not None (fixed-hidden protocol has its own check).
 
     Returns:
         results_df: one row per (basket_id, n_obs, method, k, repetition)
@@ -281,6 +303,18 @@ def run_basket_completion_experiment(
     graph_products_arr = np.array(sorted(graph_products), dtype=np.intp)
 
     max_k = max(k_values)
+
+    # For the fraction protocol, ensure all n_obs conditions evaluate the same basket population.
+    # Fixed-hidden protocol uses its own size check (len(basket_in_graph) <= n_hidden).
+    if n_hidden is None:
+        effective_min_in_graph = (
+            min_in_graph_basket_size
+            if min_in_graph_basket_size is not None
+            else min_in_graph_size_for_specs(n_obs_values)
+        )
+    else:
+        effective_min_in_graph = 2
+
     records: list[dict] = []
     # hit_stats[product][method][k] = [n_hidden, n_hit]
     hit_stats: dict = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: [0, 0])))
@@ -298,6 +332,7 @@ def run_basket_completion_experiment(
             graph_products, graph_products_arr,
             recommenders, n_obs_values, k_values,
             n_repetitions, max_k, n_hidden,
+            effective_min_in_graph,
         )
 
     n_evaluated = 0

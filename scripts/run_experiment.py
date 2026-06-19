@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.graph_builder import load_graph
 from src.recommenders import PopularityRecommender, LocalAggRecommender, PPRRecommender
-from src.evaluation import run_basket_completion_experiment
+from src.evaluation import run_basket_completion_experiment, min_in_graph_size_for_specs
 
 RANDOM_SEED = 42
 
@@ -161,6 +161,11 @@ def main() -> None:
 
     print("\n[5/5] Running experiment ...")
     n_obs_values = args.n_obs
+    min_in_graph = (
+        min_in_graph_size_for_specs(n_obs_values) if not args.n_hidden else None
+    )
+    if min_in_graph is not None:
+        print(f"  min_in_graph_basket_size={min_in_graph} (auto-derived from n_obs={n_obs_values})")
 
     recommenders = {
         "popularity": PopularityRecommender(item_counts),
@@ -189,6 +194,7 @@ def main() -> None:
         "n_workers": args.n_workers,
         "protocol": "fixed-hidden" if args.n_hidden else "fraction",
         "n_hidden": args.n_hidden,
+        "min_in_graph_basket_size": min_in_graph,
     }
     params_path = os.path.join(output_dir, "params.json")
     with open(params_path, "w") as f:
@@ -216,6 +222,7 @@ def main() -> None:
         checkpoint_fn=checkpoint_fn,
         n_workers=args.n_workers,
         n_hidden=args.n_hidden,
+        min_in_graph_basket_size=min_in_graph,
     )
 
     print(f"  Done — {len(results_df):,} result rows")
