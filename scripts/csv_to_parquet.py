@@ -1,8 +1,5 @@
 """
 Convert all CSV files in input_path to Parquet and save in output_path.
-
-Usage:
-    python scripts/csv_to_parquet.py --input-path <input_path> --output-path <output_path>
 """
 
 import argparse

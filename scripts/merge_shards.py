@@ -1,10 +1,5 @@
 """
 Merge shard results into a single parquet file.
-
-Usage:
-    python3 scripts/merge_shards.py \
-        --results-dir outputs/results \
-        --output outputs/results/experiment_results_merged.parquet
 """
 
 import argparse

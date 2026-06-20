@@ -1,15 +1,5 @@
 """
 Run the basket completion experiment.
-
-Usage:
-python3 scripts/run_experiment.py --include-all --k-values 1 2 5 \
-  --n-repetitions 10 --min-basket-size 2 --n-workers 5 \
-  --checkpoint-every 200 \
-  --max-basket-size 5 \
-  --output outputs/results/experiment_results_full.parquet
-
-Loads the association graph + item counts, builds three recommenders
-(Popularity, LocalAgg, PPR), evaluates on test baskets, and writes results.
 """
 
 import argparse

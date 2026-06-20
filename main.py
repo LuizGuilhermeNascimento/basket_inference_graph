@@ -1,15 +1,3 @@
-"""
-Usage:
-    python3 main.py \
-        --data "data/raw/transaction_data.parquet" \
-        --products "data/raw/product.parquet" \
-        --output outputs/graphs
-
-Produces:
-    outputs/graphs/association_graph.graphml
-    outputs/graphs/association_graph.gexf
-"""
-
 import argparse
 import os
 
