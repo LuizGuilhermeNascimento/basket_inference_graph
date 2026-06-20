@@ -1,17 +1,7 @@
-"""
-Usage:
-    python3 main.py \
-        --data "data/raw/transaction_data.parquet" \
-        --products "data/raw/product.parquet" \
-        --output outputs/graphs
-
-Produces:
-    outputs/graphs/association_graph.graphml
-    outputs/graphs/association_graph.gexf
-"""
-
 import argparse
 import os
+
+import numpy as np
 
 from src.preprocessing import load_transactions, clean_transactions, split_by_day
 from src.graph_builder import build_cooccurrence, compute_confidence, build_graph, save_graph, load_graph
@@ -67,6 +57,8 @@ def main() -> None:
     print("  Building co-occurrence matrix ...")
     cooc = build_cooccurrence(train_baskets, n_products)
     print(f"  Co-occurrence matrix: {cooc.C.nnz:,} nonzero entries | N={cooc.N:,} baskets")
+    np.save(os.path.join(args.output, "item_counts.npy"), cooc.N_items)
+    print(f"  Saved item counts: {args.output}/item_counts.npy")
 
     print(f"  Computing confidence (min_cooccurrence={args.min_cooccurrence}) ...")
     weight_matrix = compute_confidence(cooc, min_cooccurrence=args.min_cooccurrence)

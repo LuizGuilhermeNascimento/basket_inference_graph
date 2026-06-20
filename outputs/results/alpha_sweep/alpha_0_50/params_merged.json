@@ -1,0 +1,23 @@
+{
+  "seed": 42,
+  "min_cooccurrence": 2,
+  "min_basket_size": 2,
+  "max_basket_size": null,
+  "n_obs": [
+    "0.25",
+    "0.5",
+    "0.75"
+  ],
+  "k_values": [
+    5,
+    10,
+    20
+  ],
+  "n_repetitions": 10,
+  "alpha": 0.5,
+  "n_shards": 5,
+  "n_workers": 4,
+  "protocol": "fraction",
+  "n_hidden": null,
+  "min_in_graph_basket_size": 4
+}
